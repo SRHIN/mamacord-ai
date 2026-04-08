@@ -79,9 +79,9 @@ def generate_pdf(input_data: dict, result: dict) -> bytes:
     pdf.set_fill_color(r, g, b)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 12, "MAMACORD AI TRIAGE REPORT", ln=True, align="C", fill=True)
+    pdf.cell(0, 12, "MAMACORD AI TRIAGE REPORT", new_x="LMARGIN", new_y="NEXT", align="C", fill=True)
     pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 10, f"Risk Level: {risk}", ln=True, align="C", fill=True)
+    pdf.cell(0, 10, f"Risk Level: {risk}", new_x="LMARGIN", new_y="NEXT", align="C", fill=True)
     pdf.ln(4)
 
     pdf.set_text_color(0, 0, 0)
@@ -89,12 +89,12 @@ def generate_pdf(input_data: dict, result: dict) -> bytes:
     for heading, lines in sections[1:]:  # skip first section already rendered
         pdf.set_font("Helvetica", "B", 10)
         pdf.set_fill_color(240, 240, 240)
-        pdf.cell(0, 7, heading, ln=True, fill=True)
+        pdf.cell(0, 7, heading, new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.set_font("Helvetica", "", 9)
         for line in lines:
             if line:
                 # wrap long lines
-                pdf.multi_cell(0, 6, f"  {line}")
+                pdf.multi_cell(0, 6, f"  {line}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
     return bytes(pdf.output())

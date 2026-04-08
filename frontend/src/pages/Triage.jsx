@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Loader2, HeartPulse, FlaskConical, Scan, User, Camera, X } from "lucide-react";
 import InputField from "../components/InputField";
+import { useAuth } from "../AuthContext";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -14,6 +15,7 @@ const LIQUOR_OPTIONS = ["Normal", "Reduced", "Oligohydramnios", "Increased"];
 
 export default function Triage() {
   const navigate = useNavigate();
+  const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [ussOpen, setUssOpen] = useState(false);
@@ -112,7 +114,9 @@ export default function Triage() {
         }),
       };
 
-      const { data } = await axios.post(`${API}/api/triage`, payload);
+      const { data } = await axios.post(`${API}/api/triage`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       navigate("/result", { state: { result: data, input: payload } });
     } catch (err) {
       setError(err.response?.data?.detail || "Server error. Is the backend running?");
