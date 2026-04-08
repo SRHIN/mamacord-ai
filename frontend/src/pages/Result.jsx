@@ -1,13 +1,17 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, ChevronUp, AlertTriangle, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertTriangle, Plus, FileText, FileDown } from "lucide-react";
+import axios from "axios";
 import RiskBadge from "../components/RiskBadge";
 import HandoverNote from "../components/HandoverNote";
+
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function Result() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const [rationaleOpen, setRationaleOpen] = useState(false);
+  const [downloading, setDownloading] = useState(null); // "pdf" | "docx" | null
 
   if (!state?.result) {
     return (
@@ -24,7 +28,7 @@ export default function Result() {
     );
   }
 
-  const { result } = state;
+  const { result, input } = state;
   const isRed = result.risk_level === "RED";
 
   const actionBg = {
@@ -32,6 +36,31 @@ export default function Result() {
     YELLOW: "bg-yellow-50 border-warning text-yellow-800",
     GREEN: "bg-green-50 border-success text-green-800",
   }[result.risk_level] || "bg-gray-50 border-gray-300 text-gray-800";
+
+  async function handleDownload(format) {
+    setDownloading(format);
+    try {
+      const response = await axios.post(
+        `${API}/api/download`,
+        { format, result, input },
+        { responseType: "blob" }
+      );
+      const ext = format === "pdf" ? "pdf" : "docx";
+      const mime = format === "pdf"
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      const url = URL.createObjectURL(new Blob([response.data], { type: mime }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mamacord-triage-report.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Download failed. Please try again.");
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background pb-10">
@@ -95,9 +124,7 @@ export default function Result() {
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Guideline Sources</p>
             <ul className="space-y-1">
               {result.citations.map((c, i) => (
-                <li key={i} className="text-xs text-gray-500 italic">
-                  {c}
-                </li>
+                <li key={i} className="text-xs text-gray-500 italic">{c}</li>
               ))}
             </ul>
           </div>
@@ -108,7 +135,36 @@ export default function Result() {
           <HandoverNote note={result.handover_note} />
         )}
 
-        {/* Actions */}
+        {/* Download Report */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Download Report</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleDownload("pdf")}
+              disabled={!!downloading}
+              className="flex-1 flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary font-semibold py-3 rounded-xl text-sm disabled:opacity-50"
+            >
+              {downloading === "pdf" ? (
+                <span className="animate-pulse">Generating...</span>
+              ) : (
+                <><FileText size={16} /> Download PDF</>
+              )}
+            </button>
+            <button
+              onClick={() => handleDownload("docx")}
+              disabled={!!downloading}
+              className="flex-1 flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary font-semibold py-3 rounded-xl text-sm disabled:opacity-50"
+            >
+              {downloading === "docx" ? (
+                <span className="animate-pulse">Generating...</span>
+              ) : (
+                <><FileDown size={16} /> Download DOCX</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* New Assessment */}
         <button
           onClick={() => navigate("/")}
           className="w-full flex items-center justify-center gap-2 border-2 border-primary text-primary font-bold py-4 rounded-2xl text-base"

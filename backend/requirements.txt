@@ -7,3 +7,5 @@ rank-bm25
 numpy
 pydantic
 httpx
+fpdf2
+python-docx

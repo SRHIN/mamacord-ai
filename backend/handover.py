@@ -3,22 +3,35 @@ from datetime import datetime
 
 def generate_handover_note(data, result: dict) -> str:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    flags_text = "\n".join(f"  • {f}" for f in result.get("flags", []))
-    citations_text = "\n".join(f"  • {c}" for c in result.get("citations", []))
+    flags_text = "\n".join(f"  - {f}" for f in result.get("flags", []))
+    citations_text = "\n".join(f"  - {c}" for c in result.get("citations", []))
+
+    hb_equiv = round(data.pcv / 3, 1)
+
+    fbc_line = ""
+    if any(v is not None for v in [data.wbc, data.neutrophils, data.platelets]):
+        parts = []
+        if data.wbc is not None:
+            parts.append(f"WBC: {data.wbc} x10^3/uL")
+        if data.neutrophils is not None:
+            parts.append(f"Neutrophils: {data.neutrophils}%")
+        if data.platelets is not None:
+            parts.append(f"Platelets: {data.platelets} x10^3/uL")
+        fbc_line = f"\nFULL BLOOD COUNT\n{' | '.join(parts)}\n"
 
     note = f"""MAMACORD AI REFERRAL SUMMARY
-Risk Level: RED ●
+Risk Level: RED
 Generated: {timestamp}
 
 PATIENT DETAILS
-Age: {data.age} | Gravida: {data.gravida or 'N/A'} | Para: {data.para or 'N/A'} | GA: {data.gestational_age} weeks
+Patient ID: {data.patient_id or 'N/A'} | Age: {data.age} | Gravida: {data.gravida or 'N/A'} | Para: {data.para or 'N/A'} | GA: {data.gestational_age} weeks
 
 VITAL SIGNS
-BP: {data.systolic_bp}/{data.diastolic_bp} mmHg | Temp: {data.temperature}°C | HR: {data.heart_rate} bpm
+BP: {data.systolic_bp}/{data.diastolic_bp} mmHg | Temp: {data.temperature}C | HR: {data.heart_rate} bpm
 
 POINT-OF-CARE TESTS
-Urine protein: {data.urine_protein} | Hb: {data.hb} g/dL | Urine glucose: {data.urine_glucose}
-
+PCV: {data.pcv}% (est. Hb: {hb_equiv} g/dL) | Urine protein: {data.urine_protein} | Urine glucose: {data.urine_glucose}
+{fbc_line}
 USS FINDINGS
 Placental location: {data.placental_location or 'Not assessed'}
 Fetal presentation: {data.fetal_presentation or 'Not assessed'}
