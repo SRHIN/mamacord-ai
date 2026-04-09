@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Literal, Optional
 
 from rag import retrieve_context
-from triage import run_triage
+from triage import run_triage, extract_uss_fields
 from handover import generate_handover_note
 from download import generate_pdf, generate_docx
 from database import init_db, get_db
@@ -51,7 +51,7 @@ limiter = Limiter(key_func=get_remote_address)
 # ---------------------------------------------------------------------------
 ALLOWED_ORIGINS = os.getenv(
     "ALLOWED_ORIGINS",
-    "https://mamacord-ai-frontend.up.railway.app,http://localhost:5173,http://localhost:4173",
+    "https://mamacord-ai.vercel.app,http://localhost:5173,http://localhost:4173",
 ).split(",")
 
 # ---------------------------------------------------------------------------
@@ -284,6 +284,37 @@ class DownloadPayload(BaseModel):
 @limiter.limit("30/minute")
 def health_check(request: Request):
     return {"status": "ok", "app": "Mamacord AI"}
+
+
+class UssAnalyzeRequest(BaseModel):
+    image_base64: str
+
+
+@app.post("/api/uss-analyze")
+@limiter.limit("10/minute")
+async def uss_analyze(body: UssAnalyzeRequest, request: Request):
+    """Analyze a USS image and return structured findings to pre-fill form fields."""
+    request_id = uuid.uuid4().hex[:12]
+    logger.info("uss_analyze_start | request_id=%s", request_id)
+    try:
+        # Validate image size
+        raw = base64.b64decode(body.image_base64, validate=True)
+        if len(raw) > MAX_USS_IMAGE_BYTES:
+            raise HTTPException(status_code=400, detail="Image exceeds 5 MB limit")
+        result = await extract_uss_fields(body.image_base64)
+        logger.info("uss_analyze_complete | request_id=%s", request_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("uss_analyze_error | request_id=%s | error=%s", request_id, type(e).__name__)
+        return {
+            "placental_location": None,
+            "fetal_presentation": None,
+            "liquor_volume": None,
+            "fhr": None,
+            "summary": "USS analysis failed. Please enter findings manually.",
+        }
 
 
 @app.post("/api/triage")

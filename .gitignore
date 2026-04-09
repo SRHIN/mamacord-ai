@@ -7,10 +7,9 @@ venv/
 *.egg-info/
 backend/.env
 backend/venv/
-frontend/env.production
-frontend/env.development
-# ChromaDB
-backend/chroma_db/
+frontend/.env.production
+frontend/.env.development
+frontend/.env.local
 
 # Node
 node_modules/

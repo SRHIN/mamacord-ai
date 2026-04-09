@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../AuthContext";
 import axios from "axios";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, Eye, EyeOff } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -18,6 +18,9 @@ export default function SignUp() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pwErrors, setPwErrors] = useState([]);
 
   const [form, setForm] = useState({
     full_name: "",
@@ -30,12 +33,28 @@ export default function SignUp() {
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  function validatePassword(pw) {
+    const errs = [];
+    if (pw.length < 8) errs.push("At least 8 characters");
+    if (!/[A-Z]/.test(pw)) errs.push("At least one uppercase letter");
+    if (!/[a-z]/.test(pw)) errs.push("At least one lowercase letter");
+    if (!/[0-9]/.test(pw)) errs.push("At least one number");
+    return errs;
+  }
+
+  function handlePasswordChange(e) {
+    const pw = e.target.value;
+    setForm((f) => ({ ...f, password: pw }));
+    setPwErrors(validatePassword(pw));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
 
-    if (form.password.length < 8) {
-      setError("Password must be at least 8 characters");
+    const errs = validatePassword(form.password);
+    if (errs.length > 0) {
+      setPwErrors(errs);
       return;
     }
     if (form.password !== form.confirm_password) {
@@ -122,26 +141,61 @@ export default function SignUp() {
 
           <div className="flex flex-col gap-1">
             <label className="text-sm font-semibold text-gray-700">Password</label>
-            <input
-              required
-              type="password"
-              value={form.password}
-              onChange={set("password")}
-              placeholder="Minimum 8 characters"
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
+            <div className="relative">
+              <input
+                required
+                type={showPassword ? "text" : "password"}
+                value={form.password}
+                onChange={handlePasswordChange}
+                placeholder="Minimum 8 characters"
+                className="border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm w-full focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {form.password && pwErrors.length > 0 && (
+              <ul className="mt-1 space-y-0.5">
+                {["At least 8 characters", "At least one uppercase letter", "At least one lowercase letter", "At least one number"].map((rule) => {
+                  const pass = !pwErrors.includes(rule);
+                  return (
+                    <li key={rule} className={`text-xs flex items-center gap-1 ${pass ? "text-success" : "text-gray-400"}`}>
+                      <span>{pass ? "✓" : "○"}</span> {rule}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
             <label className="text-sm font-semibold text-gray-700">Confirm Password</label>
-            <input
-              required
-              type="password"
-              value={form.confirm_password}
-              onChange={set("confirm_password")}
-              placeholder="Re-enter your password"
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
+            <div className="relative">
+              <input
+                required
+                type={showConfirm ? "text" : "password"}
+                value={form.confirm_password}
+                onChange={set("confirm_password")}
+                placeholder="Re-enter your password"
+                className={`border rounded-lg px-3 py-2 pr-10 text-sm w-full focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                  form.confirm_password && form.confirm_password !== form.password ? "border-danger" : "border-gray-300"
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {form.confirm_password && form.confirm_password !== form.password && (
+              <span className="text-danger text-xs">Passwords do not match</span>
+            )}
           </div>
 
           {error && (

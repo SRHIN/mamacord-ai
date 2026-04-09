@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Loader2, HeartPulse, FlaskConical, Scan, User, Camera, X } from "lucide-react";
+import { Loader2, HeartPulse, FlaskConical, Scan, User, Camera, Upload, X } from "lucide-react";
 import InputField from "../components/InputField";
 import { useAuth } from "../AuthContext";
 
@@ -22,6 +22,9 @@ export default function Triage() {
   const [fbcOpen, setFbcOpen] = useState(false);
   const [ussImage, setUssImage] = useState(null); // base64 string
   const [ussImageName, setUssImageName] = useState("");
+  const [ussAnalyzing, setUssAnalyzing] = useState(false);
+  const [ussSummary, setUssSummary] = useState("");
+  const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
 
   const [form, setForm] = useState({
@@ -48,18 +51,74 @@ export default function Triage() {
 
   const [fieldErrors, setFieldErrors] = useState({});
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const FIELD_RANGES = {
+    age: [10, 60, "10–60 years"],
+    gestational_age: [1, 45, "1–45 weeks"],
+    gravida: [1, 20, "1–20"],
+    para: [0, 20, "0–20"],
+    systolic_bp: [50, 300, "50–300 mmHg"],
+    diastolic_bp: [30, 200, "30–200 mmHg"],
+    temperature: [33, 42, "33–42°C"],
+    heart_rate: [30, 250, "30–250 bpm"],
+    pcv: [5, 70, "5–70%"],
+    wbc: [0.1, 100, "0.1–100"],
+    neutrophils: [0, 100, "0–100%"],
+    platelets: [1, 1000, "1–1000"],
+    fhr: [50, 250, "50–250 bpm"],
+  };
+
+  function validateField(key, value) {
+    if (value === "" || value === null) return undefined;
+    const range = FIELD_RANGES[key];
+    if (!range) return undefined;
+    const n = parseFloat(value);
+    if (isNaN(n)) return "Enter a valid number";
+    if (n < range[0] || n > range[1]) return `Valid range: ${range[2]}`;
+    return undefined;
+  }
+
+  const set = (key) => (e) => {
+    const val = e.target.value;
+    setForm((f) => ({ ...f, [key]: val }));
+    setFieldErrors((prev) => {
+      const err = validateField(key, val);
+      if (err) return { ...prev, [key]: err };
+      const { [key]: _, ...rest } = prev;
+      return rest;
+    });
+  };
   const setSelect = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  function handleImageUpload(e) {
+  async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     setUssImageName(file.name);
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       // strip data:image/...;base64, prefix
       const b64 = ev.target.result.split(",")[1];
       setUssImage(b64);
+      setUssOpen(true);
+
+      // Auto-extract USS findings via AI vision
+      setUssAnalyzing(true);
+      setUssSummary("");
+      try {
+        const res = await axios.post(`${API}/api/uss-analyze`, { image_base64: b64 });
+        const d = res.data;
+        setForm((f) => ({
+          ...f,
+          ...(d.placental_location ? { placental_location: d.placental_location } : {}),
+          ...(d.fetal_presentation ? { fetal_presentation: d.fetal_presentation } : {}),
+          ...(d.liquor_volume ? { liquor_volume: d.liquor_volume } : {}),
+          ...(d.fhr ? { fhr: String(d.fhr) } : {}),
+        }));
+        if (d.summary) setUssSummary(d.summary);
+      } catch {
+        setUssSummary("Could not auto-extract findings. Please enter manually.");
+      } finally {
+        setUssAnalyzing(false);
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -67,11 +126,29 @@ export default function Triage() {
   function validate() {
     const required = ["age", "gestational_age", "systolic_bp", "diastolic_bp", "temperature", "heart_rate", "pcv"];
     const errors = {};
+
+    // Required field checks
     for (const k of required) {
       if (form[k] === "" || form[k] === null) {
         errors[k] = "Required";
       }
     }
+
+    // Range checks using shared FIELD_RANGES
+    const allKeys = [...required, ...(fbcOpen ? ["wbc", "neutrophils", "platelets"] : []), ...(ussOpen ? ["fhr"] : [])];
+    for (const k of allKeys) {
+      if (!errors[k] && form[k]) {
+        const err = validateField(k, form[k]);
+        if (err) errors[k] = err;
+      }
+    }
+
+    // Cross-field: systolic must be > diastolic
+    if (form.systolic_bp && form.diastolic_bp && !errors.systolic_bp && !errors.diastolic_bp) {
+      if (parseFloat(form.systolic_bp) <= parseFloat(form.diastolic_bp))
+        errors.diastolic_bp = "Must be less than systolic BP";
+    }
+
     return errors;
   }
 
@@ -195,6 +272,7 @@ export default function Triage() {
                 min="1"
                 value={form.gravida}
                 onChange={set("gravida")}
+                error={fieldErrors.gravida}
               />
               <InputField
                 label="Para"
@@ -203,6 +281,7 @@ export default function Triage() {
                 min="0"
                 value={form.para}
                 onChange={set("para")}
+                error={fieldErrors.para}
               />
             </div>
           </div>
@@ -315,6 +394,7 @@ export default function Triage() {
                 step="0.1"
                 value={form.wbc}
                 onChange={set("wbc")}
+                error={fieldErrors.wbc}
               />
               <InputField
                 label="Neutrophils"
@@ -325,6 +405,7 @@ export default function Triage() {
                 step="0.1"
                 value={form.neutrophils}
                 onChange={set("neutrophils")}
+                error={fieldErrors.neutrophils}
               />
               <InputField
                 label="Platelets"
@@ -334,6 +415,7 @@ export default function Triage() {
                 max="900"
                 value={form.platelets}
                 onChange={set("platelets")}
+                error={fieldErrors.platelets}
               />
             </div>
           )}
@@ -353,54 +435,90 @@ export default function Triage() {
 
           {ussOpen && (
             <div className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <SelectField label="Placental Location" name="placental_location" options={PLACENTA_OPTIONS} />
-                <SelectField label="Fetal Presentation" name="fetal_presentation" options={PRESENTATION_OPTIONS} />
-                <SelectField label="Liquor Volume" name="liquor_volume" options={LIQUOR_OPTIONS} />
-                <InputField
-                  label="Fetal Heart Rate"
-                  unit="bpm"
-                  type="number"
-                  min="80"
-                  max="200"
-                  value={form.fhr}
-                  onChange={set("fhr")}
-                />
-              </div>
-
-              {/* USS Image Upload */}
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Upload Obstetric USS Image (optional)</p>
+              {/* USS Image Upload — placed first so AI can auto-fill fields below */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Snap or Upload Obstetric USS Image (optional)</p>
                 {ussImage ? (
-                  <div className="flex items-center gap-2 bg-green-50 border border-success rounded-lg px-3 py-2">
-                    <Scan size={15} className="text-success shrink-0" />
-                    <span className="text-xs text-success font-medium truncate flex-1">{ussImageName}</span>
-                    <button
-                      type="button"
-                      onClick={() => { setUssImage(null); setUssImageName(""); fileInputRef.current.value = ""; }}
-                      className="text-gray-400 hover:text-danger"
-                    >
-                      <X size={15} />
-                    </button>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 bg-green-50 border border-success rounded-lg px-3 py-2">
+                      <Scan size={15} className="text-success shrink-0" />
+                      <span className="text-xs text-success font-medium truncate flex-1">{ussImageName}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setUssImage(null); setUssImageName(""); setUssSummary(""); cameraInputRef.current.value = ""; fileInputRef.current.value = ""; }}
+                        className="text-gray-400 hover:text-danger"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                    {ussAnalyzing && (
+                      <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                        <Loader2 size={14} className="animate-spin text-blue-500" />
+                        <span className="text-xs text-blue-600 font-medium">Analyzing USS image with AI vision...</span>
+                      </div>
+                    )}
+                    {ussSummary && !ussAnalyzing && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <p className="text-xs font-semibold text-amber-700 mb-0.5">AI Vision Finding</p>
+                        <p className="text-xs text-amber-600">{ussSummary}</p>
+                        <p className="text-xs text-gray-400 mt-1 italic">Fields auto-filled below — review and adjust if needed.</p>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current.click()}
-                    className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-500 hover:border-primary hover:text-primary"
-                  >
-                    <Camera size={17} />
-                    Snap or upload USS image for AI analysis
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current.click()}
+                      className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-500 hover:border-primary hover:text-primary"
+                    >
+                      <Camera size={17} />
+                      Take Photo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current.click()}
+                      className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-500 hover:border-primary hover:text-primary"
+                    >
+                      <Upload size={17} />
+                      Upload Image
+                    </button>
+                  </div>
                 )}
                 <input
-                  ref={fileInputRef}
+                  ref={cameraInputRef}
                   type="file"
                   accept="image/*"
                   capture="environment"
                   onChange={handleImageUpload}
                   className="hidden"
                 />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+              </div>
+
+              {/* USS finding fields — auto-filled by AI or entered manually */}
+              <div className="border-t border-gray-100 pt-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <SelectField label="Placental Location" name="placental_location" options={PLACENTA_OPTIONS} />
+                  <SelectField label="Fetal Presentation" name="fetal_presentation" options={PRESENTATION_OPTIONS} />
+                  <SelectField label="Liquor Volume" name="liquor_volume" options={LIQUOR_OPTIONS} />
+                  <InputField
+                    label="Fetal Heart Rate"
+                    unit="bpm"
+                    type="number"
+                    min="80"
+                    max="200"
+                    value={form.fhr}
+                    onChange={set("fhr")}
+                    error={fieldErrors.fhr}
+                  />
+                </div>
               </div>
             </div>
           )}
