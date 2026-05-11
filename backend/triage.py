@@ -133,6 +133,52 @@ async def analyze_uss_image(image_base64: str) -> str:
         return f"USS image analysis unavailable: {str(e)}"
 
 
+async def extract_uss_fields(image_base64: str) -> dict:
+    """Call GPT-4o vision to extract structured USS findings from an image."""
+    try:
+        response = await aclient.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "You are an expert obstetrician analyzing an obstetric ultrasound image. "
+                                "Extract the following findings from this image. "
+                                "Return ONLY a JSON object with these exact keys:\n"
+                                "- \"placental_location\": one of \"Normal\", \"Low-lying\", \"Praevia\" (or null if not visible)\n"
+                                "- \"fetal_presentation\": one of \"Cephalic\", \"Breech\", \"Transverse\" (or null if not visible)\n"
+                                "- \"liquor_volume\": one of \"Normal\", \"Reduced\", \"Oligohydramnios\", \"Increased\" (or null if not assessable)\n"
+                                "- \"fhr\": estimated fetal heart rate as a number in bpm (or null if not visible)\n"
+                                "- \"summary\": a one-sentence clinical summary of what you see\n\n"
+                                "If the image is not an obstetric ultrasound, set all fields to null and "
+                                "summary to \"Image does not appear to be an obstetric ultrasound.\"\n"
+                                "Output strict JSON only, no markdown."
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=300,
+            response_format={"type": "json_object"},
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        return {
+            "placental_location": None,
+            "fetal_presentation": None,
+            "liquor_volume": None,
+            "fhr": None,
+            "summary": f"USS analysis failed: {str(e)}",
+        }
+
+
 async def run_triage(data, context: str) -> dict:
     red_flags, yellow_flags = compute_safety_flags(data)
     forced_level = determine_forced_level(red_flags, yellow_flags)

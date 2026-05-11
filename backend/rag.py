@@ -32,11 +32,12 @@ def embed_query(text: str) -> list[float]:
 
 
 def build_query_string(data) -> str:
+    hb_equiv = round(data.pcv / 3, 1)
     parts = [
         f"patient age {data.age} gestational age {data.gestational_age} weeks",
         f"blood pressure {data.systolic_bp}/{data.diastolic_bp} mmHg",
         f"temperature {data.temperature}°C heart rate {data.heart_rate} bpm",
-        f"haemoglobin {data.hb} g/dL urine protein {data.urine_protein}",
+        f"PCV {data.pcv}% estimated haemoglobin {hb_equiv} g/dL urine protein {data.urine_protein}",
     ]
     if data.placental_location:
         parts.append(f"placental location {data.placental_location}")

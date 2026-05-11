@@ -5,9 +5,11 @@ __pycache__/
 .env
 venv/
 *.egg-info/
-
-# ChromaDB
-backend/chroma_db/
+backend/.env
+backend/venv/
+frontend/.env.production
+frontend/.env.development
+frontend/.env.local
 
 # Node
 node_modules/
